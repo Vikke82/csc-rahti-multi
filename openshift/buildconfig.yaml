@@ -1,0 +1,79 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: task-manager-backend-build
+  labels:
+    app: task-manager
+    component: backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/your-username/your-repo.git  # Replace with your actual repo
+      ref: main
+    contextDir: backend
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: task-manager-backend:latest
+  triggers:
+  - type: ConfigChange
+  - type: GitHub
+    github:
+      secret: github-webhook-secret
+  - type: ImageChange
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: task-manager-backend
+  labels:
+    app: task-manager
+    component: backend
+spec:
+  lookupPolicy:
+    local: false
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: task-manager-frontend-build
+  labels:
+    app: task-manager
+    component: frontend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/your-username/your-repo.git  # Replace with your actual repo
+      ref: main
+    contextDir: frontend
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: task-manager-frontend:latest
+  triggers:
+  - type: ConfigChange
+  - type: GitHub
+    github:
+      secret: github-webhook-secret
+  - type: ImageChange
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: task-manager-frontend
+  labels:
+    app: task-manager
+    component: frontend
+spec:
+  lookupPolicy:
+    local: false
