@@ -121,14 +121,31 @@ Prerequisites
 - This repo pushed to your own GitHub fork (see Students section)
 
 Create BuildConfigs from your Git repo
+
+PowerShell (Windows)
+```powershell
+# Replace with your fork URL
+$REPO = "https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git"
+
+# Create (or recreate) BuildConfigs from Git (Docker strategy)
+oc delete bc backend frontend 2>$null
+oc new-build --strategy=docker --name=backend  $REPO --context-dir=backend
+oc new-build --strategy=docker --name=frontend $REPO --context-dir=frontend
+
+# Start builds and follow logs
+oc start-build backend  --follow
+oc start-build frontend --follow
+```
+
+Bash (Linux/macOS/WSL)
 ```bash
 # Replace with your fork URL
 REPO=https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git
 
 # Create (or recreate) BuildConfigs from Git (Docker strategy)
-oc delete bc backend frontend 2>/dev/null || true
-oc new-build --strategy=docker --name=backend  $REPO --context-dir=backend
-oc new-build --strategy=docker --name=frontend $REPO --context-dir=frontend
+oc delete bc backend frontend >/dev/null 2>&1 || true
+oc new-build --strategy=docker --name=backend  "$REPO" --context-dir=backend
+oc new-build --strategy=docker --name=frontend "$REPO" --context-dir=frontend
 
 # Start builds and follow logs
 oc start-build backend  --follow
@@ -210,10 +227,21 @@ oc new-project <your-unique-project-name>
 ```
 
 3) Create builds from your fork
-```bash
-REPO=https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git
+
+PowerShell (Windows)
+```powershell
+$REPO = "https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git"
 oc new-build --strategy=docker --name=backend  $REPO --context-dir=backend
 oc new-build --strategy=docker --name=frontend $REPO --context-dir=frontend
+oc start-build backend  --follow
+oc start-build frontend --follow
+```
+
+Bash (Linux/macOS/WSL)
+```bash
+REPO=https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git
+oc new-build --strategy=docker --name=backend  "$REPO" --context-dir=backend
+oc new-build --strategy=docker --name=frontend "$REPO" --context-dir=frontend
 oc start-build backend  --follow
 oc start-build frontend --follow
 ```
@@ -235,12 +263,40 @@ oc rollout status deploy/frontend
 ```
 
 5) Test
+
+PowerShell (Windows)
+```powershell
+$BE = oc get route backend  -o jsonpath='{.spec.host}'
+$FE = oc get route frontend -o jsonpath='{.spec.host}'
+curl.exe -k https://$BE/health
+curl.exe -k https://$FE/api/info
+```
+
+Bash (Linux/macOS/WSL)
 ```bash
 BE=https://$(oc get route backend  -o jsonpath='{.spec.host}')
 FE=https://$(oc get route frontend -o jsonpath='{.spec.host}')
 curl -k $BE/health
 curl -k $FE/api/info
 ```
+
+## Shell differences: PowerShell vs Bash
+
+- Variables
+   - PowerShell: `$REPO = "https://..."` and reference as `$REPO`
+   - Bash: `REPO=https://...` and reference as `$REPO`
+- Redirecting output
+   - PowerShell: `2>$null`
+   - Bash: `>/dev/null 2>&1`
+- curl
+   - PowerShell: prefer `curl.exe` to avoid the `Invoke-WebRequest` alias
+   - Bash: `curl` is fine
+- Env vars inside commands
+   - PowerShell: `$env:REPO`
+   - Bash: `$REPO`
+- Line continuation
+   - PowerShell: backtick ` (or separate lines)
+   - Bash: `\` at end of line
 
 If your fork is private
 ```bash
