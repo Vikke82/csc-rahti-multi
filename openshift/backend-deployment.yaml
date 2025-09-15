@@ -18,7 +18,7 @@ spec:
         runAsNonRoot: true
       containers:
       - name: backend
-  image: image-registry.openshift-image-registry.svc:5000/task-manager-demo/backend:latest
+        image: image-registry.openshift-image-registry.svc:5000/task-manager-demo/backend:latest
         ports:
         - containerPort: 5000
           name: http

@@ -42,260 +42,260 @@ A demonstrative web application showcasing multi-container deployment with React
 │   ├── frontend-deployment.yaml
 │   ├── routes.yaml
 │   ├── buildconfig.yaml
-│   ├── deploy-to-rahti.sh  # Bash deployment script
-│   └── deploy-to-rahti.ps1 # PowerShell deployment script
-├── docker-compose.yml      # Local development
+# Task Manager - Multi-Container Demo (CSC Rahti / OpenShift)
+
+A small demo app showing a multi-container setup on OpenShift (CSC Rahti):
+- Frontend: React SPA served by Nginx (port 8080)
+- Backend: Flask API served by Gunicorn (port 5000)
+
+The frontend proxies API requests under /api to the backend Service inside the cluster.
+
+## Architecture
+
+```
+┌────────────────────────────┐    HTTP (Route)    ┌──────────────────────────┐
+│   Nginx (+React build)     │  ────────────────▶ │   Flask API (Gunicorn)   │
+│   Deploy: frontend         │   /api/* proxied   │   Deploy: backend        │
+│   Container port: 8080     │   to Service       │   Container port: 5000   │
+└────────────────────────────┘                    └──────────────────────────┘
+```
+
+Key detail: Nginx proxies /api/* to the backend Service name "backend" on port 5000 (same namespace). No CORS needed by default.
+
+## Repository layout
+
+```
+.
+├── backend/                 # Python Flask API
+│   ├── app.py               # Endpoints: /health, /api/*
+│   ├── requirements.txt
+│   └── Dockerfile           # OpenShift-friendly (arbitrary UID)
+├── frontend/                # React SPA
+│   ├── src/                 # React source
+│   ├── public/
+│   ├── package.json
+│   ├── Dockerfile           # Multi-stage: Node build → Nginx
+│   └── nginx.conf           # Proxies /api to Service backend:5000
+├── openshift/
+│   ├── backend-deployment.yaml     # Deployment+Service (backend)
+│   ├── frontend-deployment.yaml    # Deployment+Service (frontend)
+│   └── routes.yaml                 # Routes for frontend and backend
+├── docker-compose.yml
 └── README.md
 ```
 
-## 🛠️ Local Development
+## Local development
 
-### Prerequisites
+Prerequisites: Docker Desktop, Node.js 18+, Python 3.11+ (optional for local-only dev).
 
-- Docker and Docker Compose
-- Node.js 18+ (for frontend development)
-- Python 3.11+ (for backend development)
-
-### Quick Start with Docker Compose
-
-1. **Clone and navigate to the project:**
-   ```bash
-   git clone <your-repo-url>
-   cd "Cloud Services kontti"
-   ```
-
-2. **Start the application:**
-   ```bash
-   docker-compose up --build
-   ```
-
-3. **Access the application:**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
-   - Health checks: http://localhost:5000/health
-
-### Development Mode
-
-#### Backend Development
+Using Docker Compose
 ```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
-python app.py
+docker-compose up --build
+# Frontend: http://localhost:3000 (serves Nginx:8080)
+# Backend:  http://localhost:5000
+# Health:   http://localhost:5000/health
 ```
 
-#### Frontend Development
+Dev mode (optional)
 ```bash
+# Backend (Windows)
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+
+# Frontend
 cd frontend
 npm install
 npm start
 ```
 
-## ☁️ CSC Rahti Deployment
+## Deploy to CSC Rahti (OpenShift)
 
-### Prerequisites
+You can deploy via Git-based Docker builds. This guide uses two BuildConfigs: backend and frontend.
 
-1. **CSC Account**: Active CSC account with Rahti access
-2. **OpenShift CLI**: Download from [OpenShift releases](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/)
-3. **Git Repository**: Push your code to a Git repository (GitHub, GitLab, etc.)
+Prerequisites
+- CSC Rahti account and a project/namespace (e.g., task-manager-demo)
+- oc CLI logged in: `oc login https://api.2.rahti.csc.fi:6443`
+- This repo pushed to your own GitHub fork (see Students section)
 
-### Step-by-Step Deployment
-
-#### 1. Login to CSC Rahti
+Create BuildConfigs from your Git repo
 ```bash
-oc login --server=https://api.2.rahti.csc.fi:6443
+# Replace with your fork URL
+REPO=https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git
+
+# Create (or recreate) BuildConfigs from Git (Docker strategy)
+oc delete bc backend frontend 2>/dev/null || true
+oc new-build --strategy=docker --name=backend  $REPO --context-dir=backend
+oc new-build --strategy=docker --name=frontend $REPO --context-dir=frontend
+
+# Start builds and follow logs
+oc start-build backend  --follow
+oc start-build frontend --follow
 ```
 
-#### 2. Update Build Configuration
-Edit `openshift/buildconfig.yaml` and replace the Git repository URL:
-```yaml
-git:
-  uri: https://github.com/your-username/your-repo.git  # Your actual repo
-  ref: main
-```
-
-#### 3. Deploy Using Script
-
-**Option A: Bash (Linux/Mac/WSL)**
+Apply Deployments/Services/Routes
 ```bash
-chmod +x openshift/deploy-to-rahti.sh
-./openshift/deploy-to-rahti.sh
-```
-
-**Option B: PowerShell (Windows)**
-```powershell
-.\openshift\deploy-to-rahti.ps1
-```
-
-#### 4. Manual Deployment Steps
-
-If you prefer manual deployment:
-
-```bash
-# Create project
-oc new-project task-manager-demo
-
-# Create build configurations
-oc apply -f openshift/buildconfig.yaml
-
-# Start builds
-oc start-build task-manager-backend-build
-oc start-build task-manager-frontend-build
-
-# Wait for builds to complete
-oc logs -f bc/task-manager-backend-build
-oc logs -f bc/task-manager-frontend-build
-
-# Deploy applications
 oc apply -f openshift/backend-deployment.yaml
 oc apply -f openshift/frontend-deployment.yaml
-
-# Create routes
 oc apply -f openshift/routes.yaml
 
-# Check deployment status
-oc get pods
-oc get routes
+# Optional: set Deployments to use ImageStream tags (simpler than registry URLs)
+oc set image deploy/backend  backend=backend:latest
+oc set image deploy/frontend frontend=frontend:latest
+
+# Roll out and verify
+oc rollout restart deploy/backend
+oc rollout restart deploy/frontend
+oc rollout status deploy/backend
+oc rollout status deploy/frontend
+
+# Test Routes
+echo "Backend:  https://$(oc get route backend  -o jsonpath='{.spec.host}')/health"
+echo "Frontend: https://$(oc get route frontend -o jsonpath='{.spec.host}')/"
 ```
 
-## 🔍 API Endpoints
+Notes
+- Images are stored in the project’s internal registry via ImageStreams (backend:latest, frontend:latest).
+- Deployments reference those images (either by full registry URL or simply image: <name>:latest). Using ImageStream tags makes rollouts easier.
 
-### Health & Info
-- `GET /health` - Health check endpoint
-- `GET /api/info` - Application information
+## How the Nginx proxy works (and common pitfalls)
 
-### Tasks API
-- `GET /api/tasks` - List all tasks
-- `POST /api/tasks` - Create new task
-- `PUT /api/tasks/{id}` - Update task
-- `DELETE /api/tasks/{id}` - Delete task
+- The frontend Nginx serves the compiled React app and proxies /api/* to backend:5000.
+- Avoid trailing slash in proxy_pass when you want to preserve the prefix:
+   - Good: `proxy_pass http://backend_svc;` (with upstream) or `proxy_pass http://backend:5000;`
+   - Avoid: `proxy_pass http://backend:5000/;` (this strips the /api prefix)
+- This repo uses a named upstream:
+   ```nginx
+   upstream backend_svc { server backend:5000; keepalive 32; }
+   location /api/ { proxy_pass http://backend_svc; }
+   ```
 
-### Example API Usage
+## API endpoints
 
+Health & Info
+- GET /health
+- GET /api/info
+
+Tasks
+- GET /api/tasks
+- POST /api/tasks
+- PUT /api/tasks/{id}
+- DELETE /api/tasks/{id}
+
+Examples
 ```bash
-# Health check
-curl https://your-backend-route-url/health
-
-# Get all tasks
-curl https://your-backend-route-url/api/tasks
-
-# Create a task
-curl -X POST https://your-backend-route-url/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Deploy to Rahti", "completed": false}'
+# Replace with your backend route
+BE=https://$(oc get route backend -o jsonpath='{.spec.host}')
+curl -k $BE/health
+curl -k $BE/api/tasks
+curl -k -X POST $BE/api/tasks \
+   -H "Content-Type: application/json" \
+   -d '{"title":"Deploy to Rahti","completed":false}'
 ```
 
-## 🛡️ Security Features
+## Students: fork and onboard
 
-- **Non-root containers**: All containers run as non-root users
-- **Security contexts**: Proper security contexts defined
-- **HTTPS only**: Routes configured with TLS termination
-- **Resource limits**: Memory and CPU limits configured
-- **Health checks**: Liveness and readiness probes
+Goal: each student forks the repo and deploys it to their own Rahti project.
 
-## 📊 Monitoring & Logging
+1) Fork the repository
+- Click "Fork" in GitHub → choose your account.
+- Clone your fork locally and push any changes you need.
 
-### Health Checks
-- **Liveness Probe**: Ensures container is running
-- **Readiness Probe**: Ensures container is ready to serve traffic
-- **Health Endpoints**: `/health` for both frontend and backend
-
-### Viewing Logs
+2) Create/select a Rahti project
 ```bash
-# Backend logs
-oc logs -f deployment/task-manager-backend
-
-# Frontend logs
-oc logs -f deployment/task-manager-frontend
-
-# Build logs
-oc logs -f bc/task-manager-backend-build
+oc login https://api.2.rahti.csc.fi:6443
+oc new-project <your-unique-project-name>
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-#### Backend
-- `FLASK_ENV`: Environment mode (development/production)
-- `ENVIRONMENT`: Deployment environment identifier
-- `PORT`: Server port (default: 5000)
-
-#### Frontend
-- `REACT_APP_API_URL`: Backend API URL
-
-### Resource Limits
-
-Current configuration:
-- **Backend**: 128Mi-256Mi RAM, 100m-200m CPU
-- **Frontend**: 64Mi-128Mi RAM, 50m-100m CPU
-
-## 🚀 Scaling
-
-Scale your application:
+3) Create builds from your fork
 ```bash
-# Scale backend
-oc scale deployment task-manager-backend --replicas=3
-
-# Scale frontend
-oc scale deployment task-manager-frontend --replicas=2
+REPO=https://github.com/<YOUR_GH_USER>/csc-rahti-multi.git
+oc new-build --strategy=docker --name=backend  $REPO --context-dir=backend
+oc new-build --strategy=docker --name=frontend $REPO --context-dir=frontend
+oc start-build backend  --follow
+oc start-build frontend --follow
 ```
 
-## 🔄 Updates
-
-The application supports automatic updates through Git webhooks:
-
-1. Push changes to your Git repository
-2. OpenShift automatically triggers new builds
-3. New images are deployed automatically
-
-Manual update:
+4) Deploy and wire
 ```bash
-oc start-build task-manager-backend-build
-oc start-build task-manager-frontend-build
+oc apply -f openshift/backend-deployment.yaml
+oc apply -f openshift/frontend-deployment.yaml
+oc apply -f openshift/routes.yaml
+
+# Point Deployments at ImageStreams for simpler rollouts
+oc set image deploy/backend  backend=backend:latest
+oc set image deploy/frontend frontend=frontend:latest
+
+oc rollout restart deploy/backend
+oc rollout restart deploy/frontend
+oc rollout status deploy/backend
+oc rollout status deploy/frontend
 ```
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Build Failures**: Check build logs with `oc logs bc/<build-config>`
-2. **Pod Not Starting**: Check pod logs with `oc logs <pod-name>`
-3. **Route Not Accessible**: Verify route with `oc get routes`
-4. **API Connection Issues**: Check service endpoints with `oc get svc`
-
-### Debug Commands
-
+5) Test
 ```bash
-# Check all resources
-oc get all -l app=task-manager
-
-# Describe problematic pod
-oc describe pod <pod-name>
-
-# Check events
-oc get events --sort-by=.metadata.creationTimestamp
-
-# Port forward for debugging
-oc port-forward svc/task-manager-backend-service 5000:5000
+BE=https://$(oc get route backend  -o jsonpath='{.spec.host}')
+FE=https://$(oc get route frontend -o jsonpath='{.spec.host}')
+curl -k $BE/health
+curl -k $FE/api/info
 ```
 
-## 📝 License
+If your fork is private
+```bash
+oc create secret generic github-cred --type=kubernetes.io/basic-auth \
+   --from-literal=username=<USER> \
+   --from-literal=password=<GH_TOKEN>
+oc set build-secret bc/backend  --source github-cred
+oc set build-secret bc/frontend --source github-cred
+```
 
-This project is created for educational purposes and demonstration of multi-container applications on CSC Rahti platform.
+## Troubleshooting
 
-## 🤝 Contributing
+Nginx 404 on /api/*
+- Likely `proxy_pass http://backend:5000/;` is stripping the /api prefix.
+- Fix to `proxy_pass http://backend:5000;` or use the provided upstream config.
+
+502 Bad Gateway on /api/*
+- Check Nginx error log inside frontend pod:
+   ```bash
+   FPOD=$(oc get pods -l app=frontend -o name | head -n1)
+   oc exec $FPOD -- tail -n 200 /var/log/nginx/error.log
+   ```
+- Ensure backend Service name is `backend` and port is 5000:
+   `oc get svc backend -o yaml`
+
+`npm ci` fails (lockfile out of sync)
+- The Dockerfile falls back to `npm install` if `npm ci` fails.
+- To restore reproducible builds, run `npm install` locally to regenerate `package-lock.json`, commit, rebuild in Rahti.
+
+Uploads are slow with binary builds
+- Prefer Git builds (`oc new-build … --context-dir=…`).
+- If you must use binary builds, upload a tar without `node_modules`:
+   `tar -czf frontend.tgz -C frontend --exclude node_modules --exclude build .`
+   `oc start-build frontend --from-archive=frontend.tgz --follow`
+
+Session expired / not logged in
+- Re-login: `oc login https://api.2.rahti.csc.fi:6443 --token=<TOKEN>`
+
+## Security & resources
+
+- Containers are compatible with OpenShift’s arbitrary UID model (no fixed USER; group-writable paths).
+- Probes, CPU/memory requests/limits are defined in the Deployments.
+- Routes use TLS edge termination by default.
+
+## License
+
+Educational/demo use for CSC Rahti OpenShift.
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Test locally with Docker Compose
-5. Submit a pull request
+3. Develop and test locally
+4. Open a pull request
 
----
+— Built for CSC Rahti OpenShift Platform —
 
-**Built for CSC Rahti OpenShift Platform** 🚀
-
-For more information about CSC Rahti, visit: https://rahti.csc.fi/
+CSC Rahti docs: https://rahti.csc.fi/

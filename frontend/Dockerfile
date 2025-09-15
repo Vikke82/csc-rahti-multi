@@ -7,8 +7,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with optimizations
+# Prefer npm ci when lockfile exists; if it's out-of-sync, fall back to npm install
 RUN if [ -f package-lock.json ]; then \
-      npm ci --no-audit --no-fund --prefer-offline --progress=false; \
+      npm ci --no-audit --no-fund --prefer-offline --progress=false || \
+      npm install --no-audit --no-fund --prefer-offline --progress=false; \
     else \
       npm install --no-audit --no-fund --prefer-offline --progress=false; \
     fi
