@@ -82,7 +82,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>🚀 Task Manager</h1>
+        <h1>🚀 Ville's Task Manager</h1>
         <p>Multi-container Demo App for CSC Rahti</p>
         
         {appInfo && (
