@@ -1,6 +1,6 @@
 # Task Manager - Multi-Container Demo Application
 
-A demonstrative web application showcasing multi-container deployment with React frontend and Python Flask backend, specifically designed for deployment on **CSC Rahti OpenShift platform**.
+A demonstrative web application and template showcasing multi-container deployment with React frontend and Python Flask backend, specifically designed for deployment on **CSC Rahti OpenShift platform**.
 
 ## 🏗️ Architecture
 
